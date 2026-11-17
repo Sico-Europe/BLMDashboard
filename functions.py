@@ -122,7 +122,7 @@ def split_weekly(runs): #data per week
     weekly["Performance"] = weekly["Week"].map(weighted / total)
 
     # shift and break time available so far in each week
-    current = now()
+    current = runs["start"].max()
     shifts, week_breaks = [], []
     for week in weekly["Week"]:
         days = [week + pd.DateOffset(days=d) for d in range(work_days)]
