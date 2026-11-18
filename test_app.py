@@ -36,7 +36,12 @@ if activity.open:
                     length = (today["real_cut_length"] * today["no_parts"]).sum() / 1000
                     col2.metric("Total length of tube (m)", round(length,2))
                     edits = today["Edited"].sum()
-                    col3.metric("Number of edits", edits)
+                    with col3:
+                        st.metric("Number of edits", edits)
+                        if edits > 0:
+                            edit_rate = round(programs_run/edits)
+                            st.markdown(f"Equivalent of 1 edit every {edit_rate} parts bent")
+
 
                     """
                     -------Not sure how to display as data is not granular------
@@ -49,7 +54,8 @@ if activity.open:
                     st.subheader("Types of parts bent")
                     st.plotly_chart(per_part(today,"Program"), key="spread_today")
                     st.subheader("Types of tubes bent")
-                    st.plotly_chart(per_part(today,"tube_type"), key="spread_tubes")
+                    tubes = today.groupby("tube_type", as_index=False).agg(Parts=("no_parts", "sum"))
+                    st.plotly_chart(pie_chart(tubes["tube_type"], tubes["Parts"]), key="spread_tubes")
                     """
                     ------No method of recording time currently-------
 
@@ -127,11 +133,11 @@ if activity.open:
             st.plotly_chart(zoom_last_months(scatter(weekly), weekly["Week"]), key="efficiency_trend")
 
             st.subheader("Parts by tube type")
-            st.plotly_chart(bar(tube_breakdown["tube_type"], "Tube type", tube_breakdown["Parts"], "Parts machined"), key="tube_types")
+            st.plotly_chart(pie_chart(tube_breakdown["tube_type"],tube_breakdown["Parts"]), key="tube_types")
 
             st.subheader("Program edits per week")
             st.info("Programs require editing when metals deviate from batch to batch, behaving differently on the bender.")
-            fig = bar(weekly["Week"], "Week", weekly["Edits"], "Re-sends", color="#852ca0")
+            fig = bar(weekly["Week"], "Week", round(weekly["Edits"]/weekly["Total_Parts"]*100), "Edits per 100 parts", color="#852ca0")
             fig.update_xaxes(type="date", tickformat="%d %b<br>%Y")
             st.plotly_chart(zoom_last_months(fig, weekly["Week"]), key="edits_per_week")
 
