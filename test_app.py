@@ -18,9 +18,11 @@ if activity.open:
         result = data_handling()
         if result is None or result[0] is None:
             st.stop()
-        today, weekly, part_breakdown, tube_breakdown = result
+        today, weekly, part_breakdown, tube_breakdown, latest = result
 
         st.title("Activity Dashboard")
+        st.markdown(f"Latest data: {latest.strftime('%Y-%m-%d %H:%M:%S')}" if latest is not None else "No data available.")
+        st.info("Dashboard may be hours to a day behind real activity")
         with st.expander("Today's activity"):
             if len(today):
                 with st.container():

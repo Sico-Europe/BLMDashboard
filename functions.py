@@ -26,12 +26,12 @@ def data_handling():
     if not text:
         st.error("No data returned from Dropbox download.")
         return None
-    df = load_log(text)
+    df, latest = load_log(text)
     today = runs_today(df)
     weekly = split_weekly(df)
     part_breakdown = weekly_part_counts(df)
     tube_breakdown = df.groupby("tube_type", as_index=False).agg(Parts=("no_parts", "sum"))
-    return today, weekly, part_breakdown, tube_breakdown
+    return today, weekly, part_breakdown, tube_breakdown, latest
 
 def download_data(file):
     dbx = dropbox.Dropbox(
@@ -63,6 +63,8 @@ def load_log(text):
     datetime_columns = ["Finish", "start"]
     for col in datetime_columns:
         df[col] = pd.to_datetime(df[col],format="%Y/%m/%d %H:%M:%S",errors="coerce")
+
+    latest = df["start"].max() if not df.empty else None
     
     df = current_row(df)
 
@@ -91,7 +93,7 @@ def load_log(text):
     df = per_part_columns(df)
     df = perfomance(df)
     
-    return df.sort_values("start", kind="stable").reset_index(drop=True)
+    return df.sort_values("start", kind="stable").reset_index(drop=True), latest
 
 def weekly_part_counts(df):
     df = df.copy()
