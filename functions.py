@@ -4,7 +4,7 @@ import numpy as np
 import streamlit as st
 import dropbox
 import re
-#import datetime
+import datetime
 from zoneinfo import ZoneInfo
 #import math
 
@@ -31,7 +31,8 @@ def data_handling():
     weekly = split_weekly(df)
     part_breakdown = weekly_part_counts(df)
     tube_breakdown = df.groupby("tube_type", as_index=False).agg(Parts=("no_parts", "sum"))
-    return today, weekly, part_breakdown, tube_breakdown, latest
+    summary = program_summary(df)
+    return today, weekly, part_breakdown, tube_breakdown, latest, summary
 
 def download_data(file):
     dbx = dropbox.Dropbox(
@@ -66,7 +67,7 @@ def load_log(text):
 
     latest = df["start"].max() if not df.empty else None
     
-    df = current_row(df)
+    df = unfinished_rows(df)
 
     df = split_by_day(df)
     df["Program"] = part_key(df["Program"])
@@ -136,7 +137,7 @@ def split_weekly(runs): #data per week
     planned = (weekly["Shift_Time"] - weekly["Breaks_Time"]).where(lambda p: p > 0)
     busy = weekly["Total_Bending_Time"] + weekly["Total_Loading_Time"]
     weekly["Total_Downtime"] = (planned.fillna(0) - busy).clip(lower=0)
-    weekly["Availability"] = (busy / planned).clip(upper=1)
+    weekly["Availability"] = (busy / planned)
 
     return weekly
 
@@ -221,13 +222,11 @@ def split_by_day(df, split_cols=("no_parts", "sum_cycle_time")):
         columns=["day"]
     ).reset_index(drop=True)
 
-def current_row(df):
+def unfinished_rows(df):
     df = df.copy()
     for idx, row in df.iterrows():
         if row["no_parts"] == 999999999:
-            df.at[idx, "Finish"] = now()
-            df.at[idx, "no_parts"] = None
-            df.at[idx, "sum_cycle_time"] = None
+            df.drop(idx, inplace=True)
 
     return df
 
@@ -247,7 +246,7 @@ def runs_today(runs): #Filter today only
 def perfomance(df):
     df = df.copy()
     lower = prod(df).set_index("Program")["Lower_Quartile"]
-    df["Performance"] = (df["Program"].map(lower) * df["no_parts"]) / df["total_time"]
+    df["Performance"] = ((df["Program"].map(lower) * df["no_parts"]) / df["total_time"])
     return df
 
 def prod(runs): #calculate mean, lower and upper quartiles of run time for each product  
@@ -267,11 +266,70 @@ def prod(runs): #calculate mean, lower and upper quartiles of run time for each 
     prod_data["Confidence"] = prod_data["Run_Count"] > 200 
     return prod_data
 
-#today,weekly,part_breakdown = data_handling()
-#print(weekly)
+def program_summary(runs):
+    """Per-program average cycle time & changeover time, for the time predictor tab."""
+    completed = runs[runs["no_parts"] > 0].copy()
 
+    def weighted_cycle_time(g):
+        weights = g["no_parts"]
+        if weights.sum() == 0:
+            return np.nan
+        return np.average(g["cycle_time_per_part"], weights=weights)
 
+    summary = completed.groupby("Program").apply(
+        lambda g: pd.Series({
+            "Avg_Cycle_Time": weighted_cycle_time(g),
+            "Run_Count": g["no_parts"].sum(),
+        }),
+        include_groups=False,
+    ).reset_index()
 
+    summary["Confidence"] = summary["Run_Count"] > 500
+    return summary
+
+def compute_job_list(input_df, summary):
+    rows = []
+    grand_total_seconds = 0
+
+    for _, r in input_df.iterrows():
+        program, qty = r.get("Program"), r.get("Number Required")
+
+        if pd.isna(program) or pd.isna(qty) or program not in summary["Program"].values:
+            rows.append({
+                "Program": program, "Number Required": qty,
+                "Machine Time": "", "Total Time": "",
+            })
+            continue
+
+        qty = int(qty)
+        stat = summary[summary["Program"] == program].iloc[0]
+        total_seconds =stat["Avg_Cycle_Time"]*qty
+        grand_total_seconds += total_seconds
+
+        rows.append({
+            "Program": program, "Number Required": qty,
+            "Total Time": format_duration(total_seconds),
+        })
+
+    columns = ["Program", "Number Required", "Total Time"]
+    return pd.DataFrame(rows, columns=columns), grand_total_seconds
+
+def format_duration(seconds):
+
+    minutes = seconds / 60
+    hours = seconds / 3600
+
+    shift_start_dt = datetime.datetime.strptime(shift_start, "%H:%M")
+    shift_end_dt = datetime.datetime.strptime(shift_end, "%H:%M")
+    shift_hours = (shift_end_dt - shift_start_dt).total_seconds() / 3600
+
+    if minutes < 60:
+        return f"{minutes:.0f} min"
+    elif hours < shift_hours:
+        return f"{hours:.1f} hours"
+    else:
+        shifts = hours / shift_hours
+        return f"{hours:.1f} hours (~{shifts:.1f} shifts)"
 
 
 
@@ -476,67 +534,9 @@ def productive_seconds_per_day():
     return shift_seconds - break_seconds - (warmup_time * 60) - (cleandown_time * 60)
 
 
-def predict_job_time(avg_cycle_time, avg_changeover_time, qty):
-    routing_time = avg_cycle_time * qty
-    available_per_day = productive_seconds_per_day() - avg_changeover_time
 
-    if available_per_day <= 0:
-        # changeover alone eats the whole day's productive time - degenerate case
-        changeovers = max(1, math.ceil(routing_time / max(avg_changeover_time, 1)))
-    else:
-        changeovers = max(1, math.ceil(routing_time / available_per_day))
 
-    total_time = routing_time + changeovers * avg_changeover_time
-    return total_time, changeovers
 
-def format_duration(seconds):
 
-    minutes = seconds / 60
-    hours = seconds / 3600
-
-    shift_start_dt = datetime.datetime.strptime(shift_start, "%H:%M")
-    shift_end_dt = datetime.datetime.strptime(shift_end, "%H:%M")
-    shift_hours = productive_seconds_per_day() / 3600
-
-    if minutes < 60:
-        return f"{minutes:.0f} min"
-    elif hours < shift_hours:
-        return f"{hours:.1f} hours"
-    else:
-        shifts = hours / shift_hours
-        return f"{hours:.1f} hours (~{shifts:.1f} shifts)"
-
-def compute_job_list(input_df, summary):
-    rows = []
-    grand_total_seconds = 0
-
-    for _, r in input_df.iterrows():
-        program, qty = r.get("Program"), r.get("Number Required")
-
-        if pd.isna(program) or pd.isna(qty) or program not in summary["Program"].values:
-            rows.append({
-                "Program": program, "Number Required": qty,
-                "Estimated Batches": None, "Changeover Time": "",
-                "Routing Time": "", "Total Time": "",
-            })
-            continue
-
-        qty = int(qty)
-        stat = summary[summary["Program"] == program].iloc[0]
-        total_seconds, changeovers = predict_job_time(stat["Avg_Cycle_Time"], stat["Avg_Changeover_Time"], qty)
-        routing_seconds = stat["Avg_Cycle_Time"] * qty
-        changeover_seconds = total_seconds - routing_seconds
-        grand_total_seconds += total_seconds
-
-        rows.append({
-            "Program": program, "Number Required": qty,
-            "Estimated Batches": changeovers,
-            "Changeover Time": format_duration(changeover_seconds),
-            "Routing Time": format_duration(routing_seconds),
-            "Total Time": format_duration(total_seconds),
-        })
-
-    columns = ["Program", "Number Required", "Estimated Batches", "Changeover Time", "Routing Time", "Total Time"]
-    return pd.DataFrame(rows, columns=columns), grand_total_seconds
 
 """

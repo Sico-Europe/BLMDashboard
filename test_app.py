@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 #from functions import data_handling, now, predict_job_time, format_duration, compute_job_list
-from functions import data_handling, now
+from functions import data_handling, now, compute_job_list, format_duration
 from visualisations import half_donut_gauge, half_hour, per_part, time_pie, pie_chart, bar, scatter, zoom_last_months
 #from maintenance_functions import maintenance_data, save_changes
 import pandas as pd
@@ -18,7 +18,7 @@ if activity.open:
         result = data_handling()
         if result is None or result[0] is None:
             st.stop()
-        today, weekly, part_breakdown, tube_breakdown, latest = result
+        today, weekly, part_breakdown, tube_breakdown, latest, summary = result
 
         st.title("Activity Dashboard")
         st.markdown(f"Latest activity received: {latest.strftime('%Y-%m-%d %H:%M:%S')}" if latest is not None else "No data available.")
@@ -134,22 +134,22 @@ if activity.open:
             fig = bar(weekly["Week"], "Week", weekly["Edits"], "Re-sends", color="#852ca0")
             fig.update_xaxes(type="date", tickformat="%d %b<br>%Y")
             st.plotly_chart(zoom_last_months(fig, weekly["Week"]), key="edits_per_week")
-"""
+
 if time.open:
     result = data_handling()
     if result is None or result[0] is None:
         st.stop()
-    _, _, _, _, summary = result
+    today, weekly, part_breakdown, tube_breakdown, latest, summary = result
 
     st.title("Time calculator")
 
-    st.info("Add each product and total quantity needed to estimate total CNC time for the job list.")
+    st.info("Add each product and total quantity needed to estimate total bend time for the job list.")
 
     programs = sorted(summary["Program"].tolist())
 
     if "job_list" not in st.session_state:
         st.session_state.job_list = pd.DataFrame(
-            columns=["Program", "Number Required", "Estimated Batches", "Changeover Time", "Routing Time", "Total Time"]
+            columns=["Program", "Number Required", "Estimated Batches", "MachineTime", "Total Time"]
         )
     if "job_list_version" not in st.session_state:
         st.session_state.job_list_version = 0
@@ -162,9 +162,6 @@ if time.open:
         column_config={
             "Program": st.column_config.SelectboxColumn("Program", options=programs, required=True),
             "Number Required": st.column_config.NumberColumn("Number Required", min_value=1, step=1, required=True),
-            "Estimated Batches": st.column_config.NumberColumn("Estimated Batches", disabled=True), ##Make Estimated batches editable, adjust changeover time and total time accordingly
-            "Changeover Time": st.column_config.TextColumn("Changeover Time", disabled=True),
-            "Routing Time": st.column_config.TextColumn("Routing Time", disabled=True),
             "Total Time": st.column_config.TextColumn("Total Time", disabled=True),
         },
         key=editor_key,
@@ -188,12 +185,11 @@ if time.open:
     st.dataframe(
         summary.rename(columns={
             "Avg_Cycle_Time": "Avg Cycle Time (s)",
-            "Avg_Changeover_Time": "Avg Changeover (s)",
             "Run_Count": "Parts Recorded",
         }),
         hide_index=True,
     )
-
+"""
 if maintenance.open:
     st.title("Maintenance Dashboard")
     
