@@ -14,6 +14,7 @@ workday_offset = pd.offsets.CustomBusinessDay(weekmask="Mon Tue Wed Thu")
 shift_start = "07:00"
 shift_end = "17:00"
 breaks = [("10:00", "10:15"), ("13:00", "13:30")]
+average_edit_time = 30 #seconds
 
 file = "/blmbender.txt"
 
@@ -82,6 +83,7 @@ def load_log(text):
         ["1 in square", "1 in round", "1 1/4 in round", "1 5/8 in round"],
         default="other")
     df["Edited"] = (df["Program"] == df["Program"].shift()) & (df["Date"] == df["Date"].shift())
+
     df["Changeover"] = df["shape"] != df["shape"].shift()
 
     df["total_time"] = (df["Finish"] - df["start"]).dt.total_seconds()
@@ -114,6 +116,7 @@ def split_weekly(runs): #data per week
         Total_Bending_Time=("bend_time", "sum"),
         Total_Loading_Time=("load_time", "sum"),
         Edits=("Edited", "sum"),
+        Edit_time=("Edited", lambda x: x.sum() * average_edit_time)
     ).reset_index()
 
 
@@ -135,7 +138,7 @@ def split_weekly(runs): #data per week
     weekly["Breaks_Time"] = week_breaks
 
     planned = (weekly["Shift_Time"] - weekly["Breaks_Time"]).where(lambda p: p > 0)
-    busy = weekly["Total_Bending_Time"] + weekly["Total_Loading_Time"]
+    busy = weekly["Total_Bending_Time"] + weekly["Total_Loading_Time"] + weekly["Edit_time"]
     weekly["Total_Downtime"] = (planned.fillna(0) - busy).clip(lower=0)
     weekly["Availability"] = (busy / planned)
 

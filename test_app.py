@@ -84,6 +84,7 @@ if activity.open:
                 st.info("No data available for this week.")
             else:
                 week = week_row.iloc[0]
+                print(week)
             #Availability and performance gauges
                 col1, col2= st.columns(2)
                 with col1:
@@ -126,14 +127,17 @@ if activity.open:
             fig = bar(weekly_count["Week"], "Week", weekly_count["Total_Parts"], "Number of parts", color="#852ca0")
             fig.update_xaxes(type="date", tickformat="%d %b<br>%Y", hoverformat="%d %b %Y")
             st.plotly_chart(zoom_last_months(fig, weekly_count["Week"]), key="parts_per_week_zoom")
-
-            st.subheader("Parts breakdown",text_alignment="center")
-            st.plotly_chart(pie_chart(part_breakdown["Program"], part_breakdown["Count"]), key="parts_breakdown")
+            col1, col2= st.columns(2)
+            with col1:
+                st.subheader("Parts breakdown",text_alignment="center")
+                st.plotly_chart(pie_chart(part_breakdown["Program"], part_breakdown["Count"]), key="parts_breakdown")
+            with col2:
+                st.subheader("Parts by tube type")
+                st.plotly_chart(pie_chart(tube_breakdown["tube_type"],tube_breakdown["Parts"]), key="tube_types")
             st.subheader("Efficiency over time")
             st.plotly_chart(zoom_last_months(scatter(weekly), weekly["Week"]), key="efficiency_trend")
 
-            st.subheader("Parts by tube type")
-            st.plotly_chart(pie_chart(tube_breakdown["tube_type"],tube_breakdown["Parts"]), key="tube_types")
+            
 
             st.subheader("Program edits per week")
             st.info("Programs require editing when metals deviate from batch to batch, behaving differently on the bender.")

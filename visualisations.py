@@ -130,8 +130,8 @@ def per_part(data,column, color="#2ca02c"):
     return fig
 
 def time_pie(week):
-    labels = ["Scheduled Breaks", "Bending", "Loading/Unloading Tubes",  "Bender Idle"]
-    values = [week["Breaks_Time"], week["Total_Bending_Time"], week["Total_Loading_Time"], week["Total_Downtime"]]
+    labels = ["Scheduled Breaks", "Bending", "Loading/Unloading Tubes",  "Bender Idle","Tweaking programs"]
+    values = [week["Breaks_Time"], week["Total_Bending_Time"], week["Total_Loading_Time"], week["Total_Downtime"],week["Edit_time"]]
     return pie_chart(labels, [round(v / 3600, 1) for v in values])
 
 def pie_chart(labels, values):
